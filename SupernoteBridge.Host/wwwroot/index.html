@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SupernoteBridge</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  html, body { height: 100%; }
+  body { margin: 0; display: flex; }
+  #left { width: 50%; min-width: 380px; padding: 1rem; box-sizing: border-box; overflow-y: auto; }
+  #right { width: 50%; border-left: 1px solid #8884; display: flex; flex-direction: column; box-sizing: border-box; }
+  header { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  #status { font-size: .9rem; padding: .2rem .6rem; border-radius: 1rem; background: #c33; color: #fff; }
+  #status.on { background: #2a7; }
+  #searchbar { display: flex; align-items: center; gap: .6rem; margin: -.4rem 0 .8rem; flex-wrap: wrap; }
+  #sq { flex: 1; min-width: 14rem; padding: .35rem .5rem; font-size: .95rem; }
+  #searchbar label { font-size: .85rem; white-space: nowrap; }
+  #sqstatus { font-size: .8rem; color: #888; }
+  tr.shead td { font-size: .85rem; background: #8881; }
+  td.snip { font-size: .85rem; color: inherit; }
+  td.snip mark { background: #fd4; color: #000; padding: 0 1px; border-radius: 2px; }
+  .pg { font-size: .8rem; color: #888; white-space: nowrap; }
+  #rsresult { margin: 0 0 1rem; padding: .6rem .8rem; border-radius: .4rem; font-size: .9rem; background: #8881; border-left: 4px solid #36c; }
+  #rsresult.bad { border-left-color: #c33; }
+  #rsresult.ok { border-left-color: #2a7; }
+  #rsresult table { font-size: .82rem; margin: .4rem 0; }
+  #rsresult td, #rsresult th { padding: .15rem .4rem; }
+  #rsresult .warn { color: #c60; font-weight: 600; }
+  #rsresult .acts { margin-top: .5rem; display: flex; gap: .4rem; flex-wrap: wrap; }
+  #rsresult ul { margin: .4rem 0 0; padding-left: 1.2rem; max-height: 14rem; overflow-y: auto; }
+  #vfresult { margin: 0 0 1rem; padding: .5rem .8rem; border-radius: .4rem; font-size: .9rem; background: #8881; }
+  #vfresult.ok { border-left: 4px solid #2a7; }
+  #vfresult.bad { border-left: 4px solid #c33; }
+  #vfresult ul { margin: .4rem 0 0; padding-left: 1.2rem; max-height: 14rem; overflow-y: auto; }
+  #vfresult code { font-size: .8rem; }
+  #bkbadge { font-size: .85rem; padding: .2rem .6rem; border-radius: 1rem; background: #d90; color: #000; }
+  #crumbs { margin: .5rem 0; font-size: .95rem; }
+  #crumbs a { text-decoration: none; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid #8884; }
+  td.size, th.size { text-align: right; white-space: nowrap; }
+  tr:hover { background: #8881; }
+  a.dir { font-weight: 600; cursor: pointer; text-decoration: none; }
+  .actions { white-space: nowrap; }
+  .actions button { font-size: .8rem; margin-left: .15rem; }
+  #drop { border: 2px dashed #888; border-radius: .5rem; padding: .8rem; text-align: center; margin: 1rem 0; color: #888; }
+  #drop.hover { border-color: #2a7; color: #2a7; }
+  /* preview pane */
+  #pvhead { display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem; border-bottom: 1px solid #8884; min-height: 2rem; }
+  #pvtitle { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  #pvwrap { flex: 1; display: flex; min-height: 0; }
+  #pvbody { flex: 1; overflow: auto; display: flex; background: #8881; }
+  #pvbody img { display: block; margin: auto; }
+  #pvbody img.fit { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+  #pvbody embed { width: 100%; height: 100%; }
+  #pvempty { margin: auto; color: #888; }
+  #pager button, #zoomctl button { min-width: 2rem; }
+  #pvprint button { font-size: .8rem; margin-right: .25rem; }
+  #prstatus { font-size: .8rem; color: #888; margin-right: .4rem; }
+  #zpct { font-size: .85rem; min-width: 3ch; display: inline-block; text-align: center; }
+  #pgno { width: 6ch; text-align: right; }
+  /* hide number spinners so all 4 digits fit */
+  #pgno::-webkit-outer-spin-button, #pgno::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  #pgno { -moz-appearance: textfield; appearance: textfield; }
+  /* minimap */
+  #pvthumbs { width: 150px; overflow-y: auto; border-left: 1px solid #8884; padding: .4rem; box-sizing: border-box; }
+  .thumb { cursor: pointer; margin-bottom: .5rem; text-align: center; border: 2px solid transparent; border-radius: 3px; }
+  .thumb.cur { border-color: #2a7; }
+  .thumb img { width: 100%; display: block; min-height: 60px; background: #fff; }
+  .thumb span { font-size: .75rem; color: #888; }
+</style>
+</head>
+<body>
+<div id="left">
+  <header>
+    <h2 style="margin:0">SupernoteBridge</h2>
+    <span id="status">disconnected</span>
+    <span id="devinfo"></span>
+    <button id="bkbtn" title="mirror device to BACKUP folder">💾 Backup</button>
+    <button id="srcopen" title="open a backup from disk and browse it without the device (read-only)">📂 Open backup</button>
+    <button id="srcdev" title="back to the live device" hidden>🔌 Device</button>
+    <span id="bkbadge" hidden></span>
+    <button id="vfbtn" title="re-check every file of this backup against its manifest (SHA-256)" hidden>✔ Verify</button>
+    <span id="vfstatus"></span>
+    <span id="bkstatus"></span>
+    <span id="exstatus"></span>
+  </header>
+  <div id="searchbar">
+    <input id="sq" type="search" placeholder="🔍 search file names and handwriting (recognized text)" autocomplete="off">
+    <label title="search only inside the folder shown below"><input id="sqhere" type="checkbox"> this folder</label>
+    <span id="sqstatus"></span>
+  </div>
+  <div id="vfresult" hidden></div>
+  <div id="rsresult" hidden></div>
+  <div id="crumbs"></div>
+  <div id="drop">drop files here to upload to current folder</div>
+  <table>
+    <thead><tr><th>Name</th><th class="size">Size</th><th>Modified</th><th></th></tr></thead>
+    <tbody id="list"></tbody>
+  </table>
+</div>
+<div id="right">
+  <div id="pvhead">
+    <span id="pvtitle"></span>
+    <span id="pvexport"></span>
+    <span id="pvprint"></span>
+    <span id="pager" hidden>
+      <button id="pgprev">‹</button>
+      <input id="pgno" type="number" min="1" value="1">
+      <span id="pgtotal"></span>
+      <button id="pgnext">›</button>
+    </span>
+    <span id="zoomctl" hidden>
+      <button id="zout" title="zoom out">−</button>
+      <span id="zpct">fit</span>
+      <button id="zin" title="zoom in">+</button>
+      <button id="zfit" title="fit to window">fit</button>
+    </span>
+    <button id="pvclose" hidden>✕</button>
+  </div>
+  <div id="pvwrap">
+    <div id="pvbody"><span id="pvempty">select 👁 on a .note or .pdf to preview</span></div>
+    <div id="pvthumbs" hidden></div>
+  </div>
+</div>
+<script>
+let cwd = "\\";
+let pv = null; // { kind: "note"|"pdf", path, name, page, pages }
+let backup = null; // open backup { root, serial, createdAt, files } — offline, read-only mode; null = live device
+let deviceOn = false; // device attached (restore needs it while a backup is open)
+
+function fmtSize(n) {
+  if (n == null) return "";
+  const u = ["B","KB","MB","GB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + " " + u[i];
+}
+const enc = encodeURIComponent;
+
+async function refreshStatus() {
+  const r = await fetch("/api/device").then(r => r.json()).catch(() => null);
+  const el = document.getElementById("status");
+  const on = r && r.connected;
+  el.textContent = on ? "connected" : "disconnected";
+  el.className = on ? "on" : "";
+  document.getElementById("devinfo").textContent = on && r.info ? `${r.info.model} (${r.info.serial.slice(0,8)}…)` : "";
+  deviceOn = !!on;
+  setBackup(r ? r.backup : null);
+  return on;
+}
+
+function setBackup(b) {
+  backup = b || null;
+  const badge = document.getElementById("bkbadge");
+  badge.hidden = !backup;
+  document.getElementById("srcdev").hidden = !backup;
+  document.getElementById("drop").hidden = !!backup;
+  document.getElementById("vfbtn").hidden = !backup;
+  if (!backup) { document.getElementById("vfresult").hidden = true; document.getElementById("vfstatus").textContent = ""; }
+  if (!backup) return;
+  const when = backup.createdAt ? new Date(backup.createdAt).toLocaleString() : backup.root.split("\\").pop();
+  badge.textContent = `BACKUP ${when}` + (backup.serial ? ` · ${backup.serial.slice(0,8)}…` : "") + " · read-only";
+  badge.title = backup.root + (backup.files != null ? ` (${backup.files} files)` : "");
+}
+
+async function switchSource(url) {
+  const r = await fetch(url, { method: "POST" });
+  if (r.status === 204) return; // dialog cancelled
+  if (!r.ok) { alert(`could not open: ${r.status} ${await r.text()}`); return; }
+  closePreview();
+  document.getElementById("vfresult").hidden = true; // result belonged to the previous source
+  if (rsPanel.dataset.phase === "ready") await fetch("/api/restore/cancel", { method: "POST" }); // drop an unconfirmed plan
+  rsPanel.hidden = true;
+  const on = await refreshStatus();
+  cwd = "\\";
+  if (on || backup) go(cwd); else { crumbs(); document.getElementById("list").innerHTML = ""; }
+}
+document.getElementById("srcopen").onclick = () => switchSource("/api/source/open");
+document.getElementById("srcdev").onclick = () => switchSource("/api/source/device");
+
+function crumbs() {
+  const parts = cwd.split("\\").filter(Boolean);
+  const el = document.getElementById("crumbs");
+  el.innerHTML = "";
+  const mk = (label, path) => {
+    const a = document.createElement("a");
+    a.textContent = label; a.href = "#";
+    a.onclick = e => { e.preventDefault(); go(path); };
+    return a;
+  };
+  el.appendChild(mk(backup ? "backup" : "device", "\\"));
+  let acc = "";
+  for (const p of parts) {
+    acc += "\\" + p;
+    el.append(" \\ ");
+    el.appendChild(mk(p, acc));
+  }
+}
+
+function rowButtons(e, act, names) {
+  const ext = e.name.toLowerCase().split(".").pop();
+  if (e.isDirectory) {
+    const exp = document.createElement("button");
+    exp.textContent = "📤";
+    exp.title = "export all notes in this folder to PDF";
+    exp.onclick = () => bulkExport(e);
+    act.appendChild(exp);
+  }
+  if (!e.isDirectory && (ext === "note" || ext === "pdf" || ext === "png" || ext === "jpg" || ext === "jpeg")) {
+    const annotated = ext === "pdf" && names.has(e.name + ".mark");
+    const eye = document.createElement("button");
+    eye.textContent = annotated ? "👁✍" : "👁";
+    eye.title = annotated ? "preview with annotations" : "preview";
+    eye.onclick = () => ext === "note" ? openPaged(e, "note")
+                      : annotated     ? openPaged(e, "pdf")
+                      : openInline(e);
+    act.appendChild(eye);
+  }
+  if (backup) { // backups are read-only: no rename/delete — but they can be restored to the device
+    if (deviceOn) {
+      const rs = document.createElement("button");
+      rs.textContent = "⬆";
+      rs.title = e.isDirectory ? "restore this folder to the device" : "restore this file to the device";
+      rs.onclick = () => restorePlan(e);
+      act.appendChild(rs);
+    }
+    return;
+  }
+  const ren = document.createElement("button");
+  ren.textContent = "✏️";
+  ren.title = "rename";
+  ren.onclick = async () => {
+    const newName = prompt(`Rename "${e.name}" to:`, e.name);
+    if (!newName || newName === e.name) return;
+    const r = await fetch(`/api/rename?path=${enc(e.path)}&newName=${enc(newName)}`, { method: "POST" });
+    if (!r.ok) alert("rename failed: " + await r.text());
+    go(cwd);
+  };
+  act.appendChild(ren);
+  const del = document.createElement("button");
+  del.textContent = "🗑";
+  del.title = "delete";
+  del.onclick = async () => {
+    if (!confirm(`Delete ${e.name}?`)) return;
+    await fetch(`/api/file?path=${enc(e.path)}&recursive=${e.isDirectory}`, { method: "DELETE" });
+    go(cwd);
+  };
+  act.appendChild(del);
+}
+
+async function go(path) {
+  cwd = path;
+  endSearch(); // showing a folder ends a search
+  crumbs();
+  const list = document.getElementById("list");
+  list.innerHTML = "<tr><td colspan=4>loading…</td></tr>";
+  const r = await fetch("/api/fs?path=" + enc(path));
+  if (!r.ok) { list.innerHTML = `<tr><td colspan=4>error ${r.status} — ${backup ? "folder not found in the backup" : "is the device connected?"}</td></tr>`; return; }
+  const entries = await r.json();
+  const names = new Set(entries.map(e => e.name));
+  list.innerHTML = "";
+  for (const e of entries) {
+    const tr = document.createElement("tr");
+    const name = document.createElement("td");
+    const a = document.createElement("a");
+    if (e.isDirectory) {
+      a.className = "dir"; a.textContent = "📁 " + e.name; a.href = "#";
+      a.onclick = ev => { ev.preventDefault(); go(e.path); };
+    } else {
+      a.textContent = e.name;
+      a.href = "/api/file?path=" + enc(e.path);
+    }
+    name.appendChild(a);
+    tr.appendChild(name);
+    tr.insertAdjacentHTML("beforeend", `<td class="size">${fmtSize(e.size)}</td><td>${e.modified ? new Date(e.modified).toLocaleString() : ""}</td>`);
+    const act = document.createElement("td");
+    act.className = "actions";
+    rowButtons(e, act, names);
+    tr.appendChild(act);
+    list.appendChild(tr);
+  }
+  if (!entries.length) list.innerHTML = "<tr><td colspan=4><i>empty</i></td></tr>";
+}
+
+// ---- preview pane ----
+const pvbody = document.getElementById("pvbody");
+const pvtitle = document.getElementById("pvtitle");
+const pager = document.getElementById("pager");
+const pvclose = document.getElementById("pvclose");
+const zoomctl = document.getElementById("zoomctl");
+const zpct = document.getElementById("zpct");
+let zoom = 0; // 0 = fit to window, otherwise scale factor (1 = 100%)
+
+function applyZoom() {
+  const img = pvbody.querySelector("img");
+  if (!img) return;
+  if (zoom === 0) {
+    img.classList.add("fit");
+    img.style.width = "";
+    zpct.textContent = "fit";
+  } else {
+    img.classList.remove("fit");
+    const w = img.naturalWidth * zoom;
+    if (w > 0) img.style.width = w + "px";
+    zpct.textContent = Math.round(zoom * 100) + "%";
+  }
+}
+function currentScale() {
+  const img = pvbody.querySelector("img");
+  if (!img || !img.naturalWidth) return 1;
+  return zoom === 0 ? img.clientWidth / img.naturalWidth : zoom;
+}
+document.getElementById("zin").onclick = () => { zoom = Math.min(currentScale() * 1.25, 8); applyZoom(); };
+document.getElementById("zout").onclick = () => { zoom = Math.max(currentScale() / 1.25, 0.1); applyZoom(); };
+document.getElementById("zfit").onclick = () => { zoom = 0; applyZoom(); };
+
+const pvthumbs = document.getElementById("pvthumbs");
+let thumbObserver = null;
+
+function closePreview() {
+  pv = null;
+  zoom = 0;
+  pvtitle.textContent = "";
+  document.getElementById("pvexport").innerHTML = "";
+  cancelPrint();
+  pvprint.innerHTML = "";
+  pager.hidden = true;
+  zoomctl.hidden = true;
+  pvclose.hidden = true;
+  if (thumbObserver) { thumbObserver.disconnect(); thumbObserver = null; }
+  pvthumbs.hidden = true;
+  pvthumbs.innerHTML = "";
+  pvbody.innerHTML = '<span id="pvempty">select 👁 on a .note or .pdf to preview</span>';
+}
+pvclose.onclick = closePreview;
+
+function buildThumbs() {
+  if (thumbObserver) thumbObserver.disconnect();
+  pvthumbs.innerHTML = "";
+  pvthumbs.hidden = false;
+  // thumbnails load lazily as they scroll into view
+  thumbObserver = new IntersectionObserver(entries => {
+    for (const en of entries) {
+      if (!en.isIntersecting) continue;
+      const img = en.target.querySelector("img");
+      if (img && !img.src) img.src = img.dataset.src;
+    }
+  }, { root: pvthumbs, rootMargin: "200px" });
+
+  for (let i = 0; i < pv.pages; i++) {
+    const d = document.createElement("div");
+    d.className = "thumb";
+    d.dataset.n = i;
+    const img = document.createElement("img");
+    img.dataset.src = `/api/${pv.api}/page?path=${enc(pv.path)}&n=${i}&thumb=true`;
+    img.alt = "";
+    const lbl = document.createElement("span");
+    lbl.textContent = i + 1;
+    d.appendChild(img);
+    d.appendChild(lbl);
+    d.onclick = () => { pv.page = i; showPage(); };
+    pvthumbs.appendChild(d);
+    thumbObserver.observe(d);
+  }
+}
+
+function markCurrentThumb() {
+  for (const d of pvthumbs.children) d.classList.toggle("cur", +d.dataset.n === pv.page);
+  const cur = pvthumbs.querySelector(".thumb.cur");
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+
+const pvexport = document.getElementById("pvexport");
+
+function setExportButtons(e, api) {
+  pvexport.innerHTML = "";
+  const mk = (label, title, url) => {
+    const a = document.createElement("a");
+    a.textContent = label; a.title = title; a.href = url;
+    a.style.marginRight = ".4rem";
+    pvexport.appendChild(a);
+  };
+  if (api === "note") {
+    mk("⬇PDF", "export as vector PDF (searchable strokes)", `/api/note/export.pdf?path=${enc(e.path)}&vector=true`);
+    mk("⬇PDF·raster", "export as raster PDF (faster, image pages)", `/api/note/export.pdf?path=${enc(e.path)}&vector=false`);
+    mk("⬇TXT", "export recognized text", `/api/note/export.txt?path=${enc(e.path)}`);
+  } else if (api === "pdf") {
+    mk("⬇PDF+ink", "export PDF with annotations burned in", `/api/pdf/export.pdf?path=${enc(e.path)}`);
+  }
+}
+
+// paged preview shared by .note ("note") and annotated PDFs ("pdf")
+async function openPaged(e, api, startPage = 0) {
+  pvtitle.textContent = e.name;
+  setExportButtons(e, api);
+  cancelPrint();
+  pvprint.innerHTML = "";
+  pvclose.hidden = false;
+  pager.hidden = true;
+  zoomctl.hidden = true;
+  zoom = 0;
+  pvbody.innerHTML = '<span id="pvempty">loading… (large files take a few seconds)</span>';
+  const r = await fetch(`/api/${api}/meta?path=` + enc(e.path));
+  if (!r.ok) { pvbody.innerHTML = `<span id="pvempty">failed to open (${r.status})</span>`; return; }
+  const meta = await r.json();
+  pv = { kind: "paged", api, path: e.path, name: e.name, page: Math.min(Math.max(startPage, 0), meta.pages - 1), pages: meta.pages };
+  pager.hidden = false;
+  zoomctl.hidden = false;
+  document.getElementById("pgno").max = pv.pages;
+  document.getElementById("pgtotal").textContent = `/ ${pv.pages}`;
+  setPrintButtons();
+  buildThumbs();
+  showPage();
+}
+
+function showPage() {
+  if (!pv || pv.kind !== "paged") return;
+  document.getElementById("pgno").value = pv.page + 1;
+  const img = document.createElement("img");
+  img.alt = `page ${pv.page + 1}`;
+  img.onload = applyZoom;
+  img.src = `/api/${pv.api}/page?path=${enc(pv.path)}&n=${pv.page}`;
+  pvbody.innerHTML = "";
+  pvbody.appendChild(img);
+  applyZoom();
+  markCurrentThumb();
+}
+
+document.getElementById("pgno").onchange = function () {
+  if (!pv || pv.kind !== "paged") return;
+  let n = parseInt(this.value, 10);
+  if (isNaN(n)) { this.value = pv.page + 1; return; }
+  n = Math.min(Math.max(n, 1), pv.pages);
+  pv.page = n - 1;
+  showPage();
+};
+document.getElementById("pgno").onkeydown = ev => ev.stopPropagation(); // don't trigger arrow-key paging while typing
+document.getElementById("pgprev").onclick = () => { if (pv && pv.page > 0) { pv.page--; showPage(); } };
+document.getElementById("pgnext").onclick = () => { if (pv && pv.page < pv.pages - 1) { pv.page++; showPage(); } };
+document.addEventListener("keydown", ev => {
+  if (!pv) return;
+  if (ev.key === "Escape") closePreview();
+  if (ev.key === "+" || ev.key === "=") document.getElementById("zin").click();
+  if (ev.key === "-") document.getElementById("zout").click();
+  if (pv.kind !== "paged") return;
+  if (ev.key === "ArrowLeft") document.getElementById("pgprev").click();
+  if (ev.key === "ArrowRight") document.getElementById("pgnext").click();
+});
+
+function openInline(e) {
+  const ext = e.name.toLowerCase().split(".").pop();
+  pv = { kind: ext === "pdf" ? "pdf" : "image", path: e.path, name: e.name };
+  pvtitle.textContent = e.name;
+  pvexport.innerHTML = "";
+  cancelPrint();
+  setPrintButtons();
+  pvclose.hidden = false;
+  pager.hidden = true;
+  zoom = 0;
+  const url = "/api/preview?path=" + enc(e.path);
+  pvbody.innerHTML = "";
+  if (ext === "pdf") {
+    zoomctl.hidden = true; // the embedded PDF viewer has its own zoom
+    const em = document.createElement("embed");
+    em.src = url; em.type = "application/pdf";
+    pvbody.appendChild(em);
+  } else {
+    zoomctl.hidden = false;
+    const img = document.createElement("img");
+    img.onload = applyZoom;
+    img.src = url;
+    pvbody.appendChild(img);
+    applyZoom();
+  }
+}
+
+// ---- print ----
+// Browser-side only: the pages of the previewed document are loaded as PNGs (same
+// RAM-only endpoints as the viewer, Cache-Control: no-store) into a hidden iframe,
+// one image per printed sheet, then the browser print dialog is opened on it.
+// Nothing is written to disk; the printer is chosen in the dialog.
+const pvprint = document.getElementById("pvprint");
+let prJob = null; // { frame, cancelled }
+
+function cancelPrint() {
+  if (!prJob) return;
+  prJob.cancelled = true;
+  prJob.frame.remove();
+  prJob = null;
+}
+
+function setPrintButtons() {
+  pvprint.innerHTML = "";
+  if (!pv) return;
+  const mk = (label, title, fn) => {
+    const b = document.createElement("button");
+    b.textContent = label; b.title = title; b.onclick = fn;
+    pvprint.appendChild(b);
+  };
+  if (pv.kind === "paged") {
+    mk("🖨 page", "print the current page", () => printPages([pv.page]));
+    mk("🖨 all", "print all pages", () => printPages([...Array(pv.pages).keys()]));
+  } else if (pv.kind === "pdf") {
+    mk("🖨 all", "print all pages (rendered as images)", printPlainPdf);
+  } else if (pv.kind === "image") {
+    mk("🖨", "print this image", () => printUrls([`/api/preview?path=${enc(pv.path)}`]));
+  }
+  const st = document.createElement("span");
+  st.id = "prstatus";
+  pvprint.appendChild(st);
+}
+
+function printPages(indices) {
+  if (!pv || pv.kind !== "paged") return;
+  printUrls(indices.map(i => `/api/${pv.api}/page?path=${enc(pv.path)}&n=${i}`));
+}
+
+async function printPlainPdf() {
+  if (!pv || pv.kind !== "pdf") return;
+  const st = document.getElementById("prstatus");
+  if (st) st.textContent = "opening…";
+  const r = await fetch(`/api/pdf/meta?path=` + enc(pv.path));
+  if (!r.ok) { if (st) st.textContent = `failed to open (${r.status})`; return; }
+  const meta = await r.json();
+  printUrls([...Array(meta.pages).keys()].map(i => `/api/pdf/page?path=${enc(pv.path)}&n=${i}`));
+}
+
+async function printUrls(urls) {
+  cancelPrint();
+  const st = document.getElementById("prstatus");
+  const title = pv ? pv.name : "SupernoteBridge";
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(frame);
+  const job = { frame, cancelled: false };
+  prJob = job;
+
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title></title><style>' +
+    '@page { size: auto; margin: 10mm; }' +
+    'html, body { margin: 0; padding: 0; }' +
+    '.p { break-after: page; page-break-after: always; display: flex; justify-content: center; align-items: flex-start; }' +
+    '.p:last-child { break-after: auto; page-break-after: auto; }' +
+    '.p img { display: block; max-width: 100%; max-height: 98vh; width: auto; height: auto; object-fit: contain; }' +
+    '</style></head><body></body></html>');
+  doc.close();
+  doc.title = title;
+
+  const imgs = urls.map(() => {
+    const d = doc.createElement("div"); d.className = "p";
+    const img = doc.createElement("img"); img.alt = "";
+    d.appendChild(img); doc.body.appendChild(d);
+    return img;
+  });
+
+  // load with limited concurrency (the server renders pages one at a time anyway)
+  let next = 0, done = 0, failed = 0;
+  const upd = () => { if (st && prJob === job) st.textContent = `preparing ${done}/${urls.length}…`; };
+  upd();
+  const worker = async () => {
+    while (next < urls.length && !job.cancelled) {
+      const i = next++;
+      const ok = await new Promise(res => {
+        imgs[i].onload = () => res(true);
+        imgs[i].onerror = () => res(false);
+        imgs[i].src = urls[i];
+      });
+      if (job.cancelled) return;
+      if (ok) done++; else failed++;
+      upd();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, urls.length) }, worker));
+  if (job.cancelled) return;
+  if (failed) {
+    if (st) st.textContent = `${failed} page(s) failed to load — print aborted`;
+    cancelPrint();
+    return;
+  }
+  if (st) st.textContent = "";
+  const w = frame.contentWindow;
+  w.addEventListener("afterprint", () => { if (prJob === job) cancelPrint(); });
+  w.focus();
+  w.print();
+}
+
+// ---- upload ----
+const drop = document.getElementById("drop");
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("hover"); };
+drop.ondragleave = () => drop.classList.remove("hover");
+drop.ondrop = async e => {
+  e.preventDefault();
+  drop.classList.remove("hover");
+  for (const f of e.dataTransfer.files) {
+    drop.textContent = `uploading ${f.name}…`;
+    await fetch("/api/file?path=" + enc(cwd + "\\" + f.name), { method: "PUT", body: f });
+  }
+  drop.textContent = "drop files here to upload to current folder";
+  go(cwd);
+};
+
+// ---- backup ----
+const bkbtn = document.getElementById("bkbtn");
+const bkstatus = document.getElementById("bkstatus");
+let bkTimer = null;
+
+function fmtBk(s) {
+  if (s.phase === "idle") return "";
+  if (s.phase === "scanning") return "scanning device…";
+  if (s.phase === "copying") return `${s.doneFiles}/${s.totalFiles} (${fmtSize(s.bytesCopied)}) — ${s.currentPath ?? ""}`;
+  if (s.phase === "done") return `done: ${s.copiedFiles} files, ${fmtSize(s.bytesCopied)} → ${s.targetDir ?? ""}` + (s.warnings.length ? ` (${s.warnings.length} warnings)` : "");
+  if (s.phase === "cancelled") return "cancelled";
+  if (s.phase === "error") return "error: " + s.error;
+  return s.phase;
+}
+
+async function pollBackup() {
+  const s = await fetch("/api/backup/status").then(r => r.json()).catch(() => null);
+  if (!s) return;
+  bkstatus.textContent = fmtBk(s);
+  const running = s.phase === "scanning" || s.phase === "copying" || s.phase === "snapshot";
+  bkbtn.textContent = running ? "✖ Cancel" : "💾 Backup";
+  if (!running && bkTimer) { clearInterval(bkTimer); bkTimer = null; }
+}
+
+bkbtn.onclick = async () => {
+  if (bkbtn.textContent.startsWith("✖")) { await fetch("/api/backup/cancel", { method: "POST" }); return; }
+  bkstatus.textContent = "choose target folder in the dialog…";
+  const pick = await fetch("/api/backup/pickfolder", { method: "POST" });
+  if (pick.status === 204) { bkstatus.textContent = ""; return; } // user cancelled the dialog
+  const { path } = await pick.json();
+  const r = await fetch("/api/backup/start?root=" + enc(path), { method: "POST" });
+  if (!r.ok) { bkstatus.textContent = r.status === 503 ? "device not connected" : "already running"; return; }
+  if (!bkTimer) bkTimer = setInterval(pollBackup, 1000);
+  pollBackup();
+};
+
+// ---- bulk export ----
+const exstatus = document.getElementById("exstatus");
+let exTimer = null;
+
+async function pollExport() {
+  const s = await fetch("/api/export/status").then(r => r.json()).catch(() => null);
+  if (!s) return;
+  if (s.phase === "idle") { exstatus.textContent = ""; return; }
+  if (s.phase === "scanning") exstatus.textContent = "export: scanning…";
+  else if (s.phase === "exporting") exstatus.textContent = `export: ${s.doneFiles}/${s.totalFiles} — ${s.currentPath ?? ""}`;
+  else if (s.phase === "done") exstatus.textContent = `export done: ${s.doneFiles - s.failedFiles} PDFs` + (s.failedFiles ? `, ${s.failedFiles} failed` : "") + ` → ${s.targetDir ?? ""}`;
+  else exstatus.textContent = "export " + s.phase + (s.error ? ": " + s.error : "");
+  const running = s.phase === "scanning" || s.phase === "exporting";
+  if (!running && exTimer) { clearInterval(exTimer); exTimer = null; }
+}
+
+async function bulkExport(e) {
+  exstatus.textContent = "choose target folder in the dialog…";
+  const pick = await fetch("/api/backup/pickfolder", { method: "POST" });
+  if (pick.status === 204) { exstatus.textContent = ""; return; }
+  const { path } = await pick.json();
+  const vector = confirm("Vector PDF (searchable strokes, slower)?\nOK = vector, Cancel = raster");
+  const r = await fetch(`/api/export/start?src=${enc(e.path)}&target=${enc(path)}&vector=${vector}`, { method: "POST" });
+  if (!r.ok) { exstatus.textContent = r.status === 503 ? "device not connected" : r.status === 400 ? await r.text() : "export already running"; return; }
+  if (!exTimer) exTimer = setInterval(pollExport, 1000);
+  pollExport();
+}
+
+// ---- search ----
+// names of all files/folders + the device's recognized handwriting per .note page, on the active
+// source. The server indexes in the background (RAM only); results refresh while it fills in.
+const sq = document.getElementById("sq");
+const sqhere = document.getElementById("sqhere");
+const sqstatus = document.getElementById("sqstatus");
+let sqTimer = null, sqDebounce = null, sqLastDone = -1;
+
+function endSearch() {
+  if (sq.value) sq.value = "";
+  if (sqTimer) { clearInterval(sqTimer); sqTimer = null; }
+  sqLastDone = -1;
+}
+
+function fmtIndex(s) {
+  if (s.phase === "scanning") return "indexing: reading folders…";
+  if (s.phase === "indexing") return `indexing handwriting ${s.notesDone}/${s.notesTotal} notes…`;
+  if (s.phase === "ready") return `${s.files} files · ${s.notesTotal} notes · ${s.pagesWithText} pages with text` +
+    (s.pagesWithoutText ? `, ${s.pagesWithoutText} without (not searchable)` : "") + (s.failedNotes ? ` · ${s.failedNotes} unreadable` : "");
+  if (s.phase === "error") return "index error: " + s.error;
+  return "";
+}
+
+function highlight(text, marks) {
+  let out = "", at = 0;
+  for (const [start, len] of marks) {
+    if (start < at) continue;
+    out += esc(text.slice(at, start)) + "<mark>" + esc(text.slice(start, start + len)) + "</mark>";
+    at = start + len;
+  }
+  return out + esc(text.slice(at));
+}
+
+async function runSearch() {
+  const q = sq.value.trim();
+  if (q.length < 2) { if (!q) { const p = cwd; sqLastDone = -1; go(p); } return; }
+  const under = sqhere.checked ? cwd : "";
+  const r = await fetch(`/api/search?q=${enc(q)}&under=${enc(under)}`);
+  if (sq.value.trim() !== q) return; // typed on meanwhile
+  const list = document.getElementById("list");
+  if (!r.ok) { list.innerHTML = `<tr><td colspan=4>search failed (${r.status})${r.status === 503 ? " — device not connected" : ""}</td></tr>`; return; }
+  const res = await r.json();
+  sqstatus.textContent = fmtIndex(res.index);
+  const indexing = res.index.phase === "scanning" || res.index.phase === "indexing";
+  if (indexing && !sqTimer) sqTimer = setInterval(async () => {
+    const s = await fetch("/api/search/status").then(r => r.json()).catch(() => null);
+    if (!s) return;
+    sqstatus.textContent = fmtIndex(s);
+    if (s.notesDone !== sqLastDone || s.phase === "ready") { sqLastDone = s.notesDone; if (sq.value.trim()) runSearch(); }
+    if (s.phase !== "scanning" && s.phase !== "indexing") { clearInterval(sqTimer); sqTimer = null; }
+  }, 1000);
+
+  list.innerHTML = "";
+  const head = document.createElement("tr"); head.className = "shead";
+  head.innerHTML = `<td colspan=4>Results for <b>${esc(q)}</b>${under ? ` in <code>${esc(under)}</code>` : ""}: ` +
+    `${res.names.length} name(s), ${res.hits.length} page(s) with matching handwriting${res.truncated ? " (first 200 shown)" : ""} — `;
+  const back = document.createElement("a"); back.href = "#"; back.textContent = "← back to folder";
+  back.onclick = ev => { ev.preventDefault(); go(cwd); };
+  head.firstChild.appendChild(back);
+  list.appendChild(head);
+
+  const parentOf = p => p.slice(0, p.lastIndexOf("\\")) || "\\";
+  for (const n of res.names) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    const a = document.createElement("a"); a.href = "#";
+    a.textContent = (n.isDirectory ? "📁 " : "") + n.name;
+    if (n.isDirectory) a.className = "dir";
+    a.title = n.path;
+    a.onclick = ev => { ev.preventDefault(); go(n.isDirectory ? n.path : parentOf(n.path)); };
+    td.appendChild(a);
+    const where = document.createElement("div"); where.className = "pg"; where.textContent = parentOf(n.path);
+    td.appendChild(where);
+    tr.appendChild(td);
+    tr.insertAdjacentHTML("beforeend", `<td class="size">${fmtSize(n.size)}</td><td></td>`);
+    const act = document.createElement("td"); act.className = "actions";
+    if (!n.isDirectory) rowButtons({ path: n.path, name: n.name, isDirectory: false, size: n.size }, act, new Set());
+    tr.appendChild(act);
+    list.appendChild(tr);
+  }
+  for (const h of res.hits) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    const a = document.createElement("a"); a.href = "#";
+    a.textContent = h.name; a.title = h.path;
+    a.onclick = ev => { ev.preventDefault(); openPaged({ path: h.path, name: h.name }, "note", h.page); };
+    td.appendChild(a);
+    td.insertAdjacentHTML("beforeend", ` <span class="pg">p. ${h.page + 1}</span>`);
+    tr.appendChild(td);
+    const sn = document.createElement("td"); sn.colSpan = 3; sn.className = "snip";
+    sn.innerHTML = highlight(h.snippet, h.marks);
+    tr.appendChild(sn);
+    list.appendChild(tr);
+  }
+  if (!res.names.length && !res.hits.length)
+    list.insertAdjacentHTML("beforeend", `<tr><td colspan=4><i>nothing found${indexing ? " yet — still indexing" : ""}</i></td></tr>`);
+}
+
+sq.addEventListener("input", () => { clearTimeout(sqDebounce); sqDebounce = setTimeout(runSearch, 300); });
+sq.addEventListener("keydown", ev => { ev.stopPropagation(); if (ev.key === "Escape") go(cwd); });
+sqhere.onchange = () => { if (sq.value.trim()) runSearch(); };
+sq.addEventListener("focus", async () => { // refresh: picks up files changed since the last index
+  const r = await fetch("/api/search/refresh", { method: "POST" }).catch(() => null);
+  if (r && r.ok) { const s = await fetch("/api/search/status").then(r => r.json()); sqstatus.textContent = fmtIndex(s); }
+});
+
+// ---- restore from backup to device ----
+// plan (server compares every file with the device, writes nothing) → summary + confirm
+// (overwrite or skip files the device has in another version) → restore → per-file results
+const rsPanel = document.getElementById("rsresult");
+let rsTimer = null;
+const fmtDate = d => d ? new Date(d).toLocaleString() : "—";
+
+async function restorePlan(e) {
+  rsPanel.hidden = false; rsPanel.className = "";
+  rsPanel.textContent = `Checking ${e.name} against the device…`;
+  const r = await fetch("/api/restore/plan?path=" + enc(e.path), { method: "POST" });
+  if (!r.ok) { rsPanel.className = "bad"; rsPanel.textContent = `Restore: ${r.status === 503 ? "device not connected" : await r.text()}`; return; }
+  rsPoll();
+}
+
+function rsPoll() { if (!rsTimer) rsTimer = setInterval(pollRestore, 500); pollRestore(); }
+
+async function pollRestore() {
+  const s = await fetch("/api/restore/status").then(r => r.json()).catch(() => null);
+  if (!s) return;
+  rsPanel.dataset.phase = s.phase;
+  const running = s.phase === "planning" || s.phase === "restoring";
+  if (!running && rsTimer) { clearInterval(rsTimer); rsTimer = null; }
+  if (s.phase === "idle") return;
+  rsPanel.hidden = false;
+  const name = (s.source || "").split("\\").pop();
+  const btn = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; return b; };
+  const acts = (...bs) => { const d = document.createElement("div"); d.className = "acts"; bs.forEach(b => d.appendChild(b)); rsPanel.appendChild(d); };
+  const cancel = btn("✖ Cancel", async () => { await fetch("/api/restore/cancel", { method: "POST" }); rsPoll(); });
+  const close = btn("Close", () => { rsPanel.hidden = true; });
+
+  if (running) {
+    rsPanel.className = "";
+    const verb = s.phase === "planning" ? "Checking" : "Restoring";
+    rsPanel.innerHTML = `<b>${verb} ${esc(name)}</b> — ${s.done}/${s.total} files (${fmtSize(s.bytes)} of ${fmtSize(s.totalBytes)})` +
+      (s.currentPath ? `<br><code>${esc(s.currentPath)}</code>` : "");
+    acts(cancel);
+    return;
+  }
+  if (s.phase === "ready") {
+    rsPanel.className = "";
+    const toCopy = s.new + s.different;
+    let h = `<b>⬆ Restore ${esc(s.source)}</b> from the backup to the same place on the device:<br>` +
+      `${s.new} new · ${s.same} identical (skipped) · ${s.different} different on the device` +
+      (s.damaged ? ` · <span class="warn">${s.damaged} damaged in the backup (skipped — run ✔ Verify)</span>` : "") +
+      (s.blocked ? ` · <span class="warn">${s.blocked} blocked by a folder of the same name</span>` : "") +
+      (s.dirsToCreate ? ` · ${s.dirsToCreate} folder(s) to create` : "");
+    if (s.warning) h += `<br><span class="warn">⚠ ${esc(s.warning)}</span>`;
+    if (s.different) {
+      h += `<table><tr><th>different on the device</th><th>backup</th><th>device now</th></tr>` +
+        s.items.filter(i => i.status === "different").map(i =>
+          `<tr><td><code>${esc(i.path.split("\\").pop())}</code></td><td>${fmtSize(i.size)} · ${fmtDate(i.backupModified)}</td>` +
+          `<td>${fmtSize(i.deviceSize)} · ${fmtDate(i.deviceModified)}</td></tr>`).join("") + "</table>" +
+        `Overwriting replaces the device version; it is lost unless a newer backup holds it.`;
+    }
+    rsPanel.innerHTML = h;
+    const go = (overwrite) => async () => {
+      const r = await fetch("/api/restore/start?overwrite=" + overwrite, { method: "POST" });
+      if (!r.ok) { rsPanel.className = "bad"; rsPanel.textContent = `Restore: ${r.status === 503 ? "device not connected" : await r.text()}`; return; }
+      rsPoll();
+    };
+    if (s.different) acts(btn(`⬆ Restore, overwrite ${s.different} different`, go(true)), btn(`⬆ Restore, skip different` + (s.new ? ` (${s.new} new)` : ""), go(false)), cancel);
+    else if (s.new || s.dirsToCreate) acts(btn(`⬆ Restore ${s.new} file(s)`, go(false)), cancel);
+    else { rsPanel.innerHTML += "<br>Nothing to restore — the device already has everything."; acts(btn("Close", async () => { await fetch("/api/restore/cancel", { method: "POST" }); rsPanel.hidden = true; })); }
+    return;
+  }
+  if (s.phase === "done") {
+    const res = s.items.map(i => i.result || "");
+    const n = p => res.filter(x => x.startsWith(p)).length;
+    const failed = n("failed");
+    rsPanel.className = failed ? "bad" : "ok";
+    rsPanel.innerHTML = `<b>${failed ? "✖" : "✔"} Restore of ${esc(name)} finished</b> — ${n("restored")} restored and verified · ${n("skipped")} skipped · ${failed} failed` +
+      "<ul>" + s.items.filter(i => !(i.result || "").startsWith("skipped: identical"))
+        .map(i => `<li><code>${esc(i.path)}</code> — ${esc(i.result || "")}</li>`).join("") + "</ul>";
+    acts(close);
+    return;
+  }
+  rsPanel.className = "bad";
+  rsPanel.textContent = s.phase === "cancelled" ? "Restore cancelled." : `Restore failed: ${s.error}`;
+  acts(close);
+}
+
+// ---- verify backup ----
+const vfbtn = document.getElementById("vfbtn");
+const vfstatus = document.getElementById("vfstatus");
+const vfresult = document.getElementById("vfresult");
+let vfTimer = null;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function pollVerify() {
+  const s = await fetch("/api/verify/status").then(r => r.json()).catch(() => null);
+  if (!s) return;
+  const running = s.phase === "verifying";
+  vfbtn.textContent = running ? "✖ Cancel verify" : "✔ Verify";
+  if (running) {
+    const mbs = s.elapsedMs > 0 ? (s.bytesHashed / 1048576) / (s.elapsedMs / 1000) : 0;
+    vfstatus.textContent = `verifying ${s.doneFiles}/${s.totalFiles} (${fmtSize(s.bytesHashed)} of ${fmtSize(s.totalBytes)}, ${mbs.toFixed(0)} MB/s)`;
+    return;
+  }
+  if (vfTimer) { clearInterval(vfTimer); vfTimer = null; }
+  if (s.phase === "idle") return;
+  vfstatus.textContent = "";
+  showVerifyResult(s);
+}
+
+function showVerifyResult(s) {
+  vfresult.hidden = false;
+  if (s.phase !== "done") {
+    vfresult.className = "bad";
+    vfresult.textContent = s.phase === "cancelled" ? "Verify cancelled." : `Verify failed: ${s.error}`;
+    return;
+  }
+  const secs = (s.elapsedMs / 1000).toFixed(1);
+  const head = `${s.okFiles}/${s.totalFiles} files OK · ${fmtSize(s.totalBytes)} checked in ${secs} s`;
+  vfresult.className = s.problems.length ? "bad" : "ok";
+  vfresult.innerHTML = s.problems.length
+    ? `<b>✖ ${s.problems.length} problem(s)</b> — ${esc(head)}<ul>` +
+      s.problems.map(p => `<li><b>${esc(p.kind.toUpperCase())}</b> <code>${esc(p.path)}</code>${p.detail ? " — " + esc(p.detail) : ""}</li>`).join("") + "</ul>"
+    : `<b>✔ Backup intact</b> — ${esc(head)}; every file matches its SHA-256 and nothing unexpected is in the folder.`;
+  const save = document.createElement("a");
+  save.href = "#"; save.textContent = " ⬇ save report"; save.title = "download this result as JSON";
+  save.onclick = ev => {
+    ev.preventDefault();
+    const blob = new Blob([JSON.stringify({ verifiedAt: new Date().toISOString(), ...s }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "verify_" + (s.root || "backup").split("\\").pop() + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  vfresult.appendChild(save);
+}
+
+vfbtn.onclick = async () => {
+  if (vfbtn.textContent.startsWith("✖")) { await fetch("/api/verify/cancel", { method: "POST" }); return; }
+  vfresult.hidden = true;
+  const r = await fetch("/api/verify/start", { method: "POST" });
+  if (!r.ok) { vfstatus.textContent = await r.text(); return; }
+  if (!vfTimer) vfTimer = setInterval(pollVerify, 500);
+  pollVerify();
+};
+
+(async () => {
+  fetch("/api/restore/status").then(r => r.json()).then(s => { // resume a restore in progress after a reload
+    if (["planning", "ready", "restoring"].includes(s.phase)) rsPoll();
+  }).catch(() => {});
+  pollBackup(); // reflect a backup already in progress on page load
+  pollExport();
+  const on = await refreshStatus();
+  setInterval(async () => {
+    const was = document.getElementById("status").className === "on";
+    const is = await refreshStatus();
+    if (is && !was && !backup) go(cwd); // a device plugged in while a backup is open does not switch away
+    if (backup && !!is !== was) go(cwd); // ... but the ⬆ restore buttons follow the device's presence
+  }, 3000);
+  if (on || backup) go(cwd); else crumbs();
+})();
+</script>
+</body>
+</html>

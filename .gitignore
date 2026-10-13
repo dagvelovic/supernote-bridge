@@ -1,0 +1,23 @@
+# build output
+bin/
+obj/
+publish/
+*.pdb
+*.user
+.vs/
+
+# local configuration and data (never commit)
+settings.json
+BACKUP/
+*_SUPERNOTE_BACKUP/
+spike-out/
+scripts/logs/
+
+# personal device content: keep real notes out of the repo
+*.note
+*.mark
+
+# local agent/session notes
+.claude/
+tasks/
+HANDOFF.md

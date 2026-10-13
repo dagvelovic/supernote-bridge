@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SupernoteBridge.Core\SupernoteBridge.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms> <!-- FolderBrowserDialog for backup target picking -->
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest> <!-- wwwroot inside the single exe -->
+    <AssemblyName>SupernoteBridge</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**\*" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.*" />
+  </ItemGroup>
+
+</Project>
